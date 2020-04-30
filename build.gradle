@@ -1,0 +1,49 @@
+plugins {
+    id 'java'
+    id 'idea'
+    id "org.springframework.boot" version "2.2.6.RELEASE"
+    id "io.freefair.lombok" version "5.0.0"
+}
+
+springBoot {
+    mainClassName = "com.computermind.virusgame.Application"
+}
+
+group 'virus.game'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 13
+
+repositories {
+    mavenCentral()
+}
+
+apply plugin: 'java'
+apply plugin: 'idea'
+apply plugin: 'org.springframework.boot'
+apply plugin: 'io.spring.dependency-management'
+ apply plugin: 'io.freefair.lombok'
+
+bootRun {
+    systemProperties = System.properties
+}
+
+idea {
+    module {
+        inheritOutputDirs = false
+        outputDir = compileJava.destinationDir
+        testOutputDir = compileTestJava.destinationDir
+    }
+}
+
+dependencies {
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    compile files('../sfp/target/sfp-2.0-SNAPSHOT.jar')
+
+    compile('org.springframework.boot:spring-boot-starter-web')
+    compile 'org.springframework.boot:spring-boot-configuration-processor'
+
+    compile 'com.google.guava:guava:27.1-jre'
+}

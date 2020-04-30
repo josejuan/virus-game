@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>*PRIVATE USE* Virus Game</title>
+    <script src="https://code.jquery.com/jquery-3.5.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script src="jquery.ui.touch-punch.min.js"></script>
+    <script>
+        function rndi() {
+            return ~~(Math.random() * 1000000);
+        }
+
+        var password = rndi();
+
+        function addtimedtext(msg) {
+            var m = msg;
+            $('#messages').prepend(m);
+            window.setTimeout(function () { m.remove() }, 60000);
+        }
+        function adderr(msg) {
+            addtimedtext($('<p style="color: red" />').text(msg));
+        }
+        function addmsg(msg) {
+            addtimedtext($('<p style="color: green" />').text(msg));
+        }
+        function api(method, params, callback) {
+            var k = callback;
+            return $.post('api/' + method, params, function (r) {
+                if(r.error != null)
+                    adderr(r.error);
+                else
+                    !!k && k(r.success);
+            }).fail(function () {
+                adderr("ARGH!!!! fallo fatal");
+            });
+        }
+        function resetDraggable(i) {
+            i.css({left: 0, top: 0, 'z-index': ''});
+        }
+        function stopDragHandler(e, ui) {
+            resetDraggable(ui.helper);
+            console.log(e);
+            console.log(ui);
+        }
+        function doAction(srcPlayer, srcKind, srcTipo, dstPlayer, dstKind, dstTipo) {
+            console.log("{" + srcPlayer + ", " + srcKind + ", " + srcTipo + "} => {" + dstPlayer + ", " + dstKind + ", " + dstTipo + "}");
+            api("accion", {gameId: window.gameid, player: window.playerid, password: password,
+                srcPlayer: srcPlayer, srcKind: srcKind, srcTipo: srcTipo,
+                dstPlayer: dstPlayer, dstKind: dstKind, dstTipo: dstTipo });
+        }
+        function makeDroppable(e) {
+            e.droppable({
+                over: function (e, ui) {  },
+                out: function (e, ui) {  },
+                drop: function (e, ui) {
+                    var srcPlayer = ui.helper.closest('[data-playerid]').map((u, v) => $(v).data('playerid')).get()[0];
+                    var srcKind = ui.helper.data('kind');
+                    var srcTipo = ui.helper.data('tipo');
+                    var dstPlayer = $(this).closest('[data-playerid]').map((u, v) => $(v).data('playerid')).get()[0];
+                    var dstKind = $(this).data('kind');
+                    var dstTipo = $(this).data('tipo');
+                    doAction(srcPlayer, srcKind, srcTipo, dstPlayer, dstKind, dstTipo);
+                }
+            });
+            return e;
+        }
+        function addManoCarta(c, tipo, draggable) {
+            var i = $('<img src="img/' + tipo + '.png" data-kind="carta" data-tipo="' + tipo + '" />');
+            c.append(i);
+            if(draggable)
+                i.draggable({
+                    start: function (e, u) { u.helper.css({'z-index': 1000}) },
+                    drag: function (e, u) {  },
+                    stop: stopDragHandler
+                });
+            makeDroppable(i);
+        }
+        function updateCartas(c, xs, ownPlayer) {
+            var ys = c.find('img').map((i, e) => $(e).data('tipo')).get().sort();
+            xs = xs.sort();
+            var j = 0, k = 0;
+            while(j < ys.length && k < xs.length) {
+                if(ys[j] < xs[k]) {
+                    $(c.find('[data-tipo="' + ys[j] + '"]').get()[0]).remove();
+                    j += 1;
+                } else if(ys[j] > xs[k]) {
+                    addManoCarta(c, xs[k], ownPlayer);
+                    k += 1;
+                } else {
+                    j += 1;
+                    k += 1;
+                }
+            }
+            while(j < ys.length) {
+                $(c.find('[data-tipo="' + ys[j] + '"]').get()[0]).remove();
+                j += 1;
+            }
+            while(k < xs.length) {
+                addManoCarta(c, xs[k], ownPlayer);
+                k += 1;
+            }
+        }
+        function updatePlayer(player) {
+            var pdiv = $('#players [data-playerid="' + player.id + '"]');
+            if(pdiv.get().length == 0) {
+                pdiv = $('<div class="player" data-playerid="' + player.id + '"><div class="avatar" data-kind="player" data-tipo="' + player.id + '"><img src="img/player.png" /><br /><span class="player-name">' + player.name + '</span></div><div class="mano"></div><div class="dock ORGANO_COMODIN"></div><div class="dock ORGANO_1"></div><div class="dock ORGANO_2"></div><div class="dock ORGANO_3"></div><div class="dock ORGANO_4"></div></div>');
+                makeDroppable(pdiv.find('.avatar'));
+                $('#players').append(pdiv);
+            }
+            updateCartas(pdiv.find('.mano'), player.mano, player.id == window.playerid);
+            var os = {ORGANO_COMODIN: [], ORGANO_1: [],ORGANO_2: [], ORGANO_3: [], ORGANO_4: []};
+            for(var j = 0; j < player.jugada.length; j++)
+                os[player.jugada[j][0]] = player.jugada[j];
+            Object.keys(os).map(k => {
+                var j = pdiv.find('.' + k);
+                updateCartas(j, os[k], true);
+                j.find('[data-tipo^="ORGANO"]').prependTo(j);
+            });
+            if(player.current) pdiv.addClass('is-current'); else pdiv.removeClass('is-current');
+        }
+        function updateStatus() {
+            $('#top .status').text('x');
+            api("status", {gameId: window.gameid, player: window.playerid, password: password}, function (r) {
+                window.rrr = r;
+                if($('#do_start_game').is(":visible") && r.players.map(x => x.current).reduce((a, b) => a || b)) {
+                    $('#do_tirar_carta').show();
+                    $('#do_usar_carta').show();
+                    $('#do_help').show();
+                    $('#do_start_game').hide();
+                }
+                if(r.terminada) {
+                    $('#fin_partida').show();
+                    $('#do_tirar_carta').hide();
+                    $('#do_usar_carta').hide();
+                    $('#do_help').hide();
+                }
+                while(window.msgid < r.messages.length) {
+                    var m = r.messages[window.msgid++];
+                    if(m.error) adderr(m.text); else addmsg(m.text);
+                }
+                var k = rndi();
+                $('#players .player').data('update-k', k);
+                for(var i = 0; i < r.players.length; i++)
+                    updatePlayer(r.players[i]);
+                // TODO eliminar los que se hayan ido de la sala
+                // $('#players .player').filter(... != k).remove();
+            }).always(function () {
+                $('#top .status').text('+');
+                window.setTimeout(updateStatus, 1000);
+            });
+        }
+        $(function () {
+            window.msgid = 0;
+            $('#new_game').click(function () {
+                $('#step_neworjoin').hide();
+                $('#step_new').show();
+            });
+            $('#join_game').click(function () {
+                $('#step_neworjoin').hide();
+                $('#step_join').show();
+            });
+            $('#do_new_game').click(function () {
+                var id = $('#new_game_id').val().trim();
+                if(id == "")
+                    adderr('¡Tienes que dar un nombre a la sala!');
+                else {
+                    api('new', {gameId: id, password: password}, function (r) {
+                        window.gameid = id;
+                        $('#top .gameid').text(id);
+                        addmsg('Juego creado!');
+                        $('#step_new').hide();
+                        $('#step_playerin').show();
+                    $('#top').show();
+                    });
+                }
+            });
+            $('#do_join_game').click(function () {
+                var id = $('#join_game_id').val().trim();
+                if(id == "")
+                    adderr('¡Tienes que indicar el nombre de la sala!');
+                else {
+                    window.gameid = id;
+                    $('#top .gameid').text(id);
+                    $('#step_join').hide();
+                    $('#step_playerin').show();
+                    $('#top').show();
+                }
+            });
+            $('#do_player_in').click(function () {
+                var playerid = $('#player_id').val().trim();
+                if(playerid == "")
+                    adderr('¡Tienes que tener un nombre de jugador!');
+                else {
+                    api('join', {gameId: window.gameid, player: playerid, password: password}, function (r) {
+                        window.playerid = playerid;
+                        $('#top .playerid').text(playerid);
+                        addmsg('Estás dentro!');
+                        $('#step_playerin').hide();
+                        $('#step_game, #actions').show();
+                        updateStatus();
+                    });
+                }
+            });
+            $('#do_start_game').click(function () {
+                api('start', {gameId: window.gameid, password: password});
+            });
+            makeDroppable($('#do_tirar_carta,#do_usar_carta,#do_help')).click(function () {
+                var e = $(this);
+                doAction(window.playerid, null, null, null, e.data('kind'), e.data('tipo'));
+            });
+        });
+
+
+
+    </script>
+    <style>
+        #top label {
+            font-weight: bold;
+        }
+        #top span {
+            font-weight: bold;
+            color: blue;
+        }
+        #leftpan {
+            float: left;
+        }
+        #messages {
+            height: 5000px;
+            width: 200px;
+            font-size: 0.75em;
+            background-color: lightgray;
+            overflow: scroll;
+        }
+        .player {
+            margin-top: 10px;
+        }
+        .mano {
+            display: inline-block;
+            width: 200px;
+            background-color: #f0b090;
+            padding: 5px;
+            border-radius: 10px;
+            border: 2px solid gray;
+            min-height: 100px;
+        }
+        .mano img {
+            max-width: 60px;
+        }
+        .player-name {
+            background-color: rgba(255, 0, 0, 0.5);
+        }
+        .is-current .player-name {
+            background-color: green;
+        }
+        .ui-droppable {
+            border: 3px solid rgba(200, 200, 0, 0);
+        }
+        .ui-droppable-hover {
+            border: 3px solid rgba(255, 255, 0, 0.5) !important;
+            background-color: rgba(0, 0, 0, 0.125) !important;
+        }
+        #top div {
+            display: inline-block;
+        }
+        #actions div {
+            display: table-cell;
+            cursor: pointer;
+            height: 50px;
+            min-width: 100px;
+            text-align: center;
+            vertical-align: middle;
+            margin-right: 15px;
+            width: 150px;
+
+            border-radius: 25px;
+            border: 4px solid lightgray;
+            padding: 0.15em 0.15em 0.15em;
+            font-size: 24px;
+        }
+        .avatar {
+            display: inline-block;
+            float: left;
+            text-align: center;
+            width: 100px;
+            overflow: hidden;
+        }
+        .avatar img {
+            width: 60px;
+        }
+        .avatar span {
+            padding: 0.5em;
+        }
+        .dock {
+            display: inline-block;
+            margin-left: 3px;
+        }
+        .dock img {
+            width: 30px;
+            margin-left: -25px;
+        }
+
+        .dock img:first-child {
+            width: 60px;
+            margin-left: 0px;
+        }
+
+        #fin_partida {
+            width: 800px;
+            font-size: 30px;
+            -webkit-animation: theend 1s infinite;  /* Safari 4+ */
+            -moz-animation: theend 1s infinite;  /* Fx 5+ */
+            -o-animation: theend 1s infinite;  /* Opera 12+ */
+            animation: theend 1s infinite;  /* IE 10+, Fx 29+ */
+        }
+
+        @-webkit-keyframes theend {
+            0%, 49% {
+                background-color: #ffb4b4;
+            }
+            50%, 100% {
+                background-color: #ff9494;
+            }
+        }
+
+        .form {
+            text-align: center;
+        }
+
+        .form span {
+            font-size: 24px;
+            display: block;
+            margin: 1em;
+        }
+
+        .form button {
+            margin: 0.5em;
+            font-size: 20px;
+            padding: 0.5em;
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+        }
+
+        .form input {
+            font-size: 27px;
+            padding: 0.25em;
+        }
+
+        .buttona {
+            background-color: #53940b;
+        }
+
+        .buttonb {
+            background-color: #d09c3e;
+        }
+
+        #step_new {
+        }
+
+        #do_tirar_carta {
+            background-color: #ff7676;
+        }
+
+        #do_tirar_carta span {
+            font-size: 30px;
+        }
+
+        #do_start_game {
+            color: white;
+            background-color: green;
+        }
+
+        #do_usar_carta {
+            background-color: #b1b1ff;
+        }
+
+        #do_help {
+            background-color: darkgrey;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="leftpan">
+    <div id="messages">
+    </div>
+</div>
+
+<div id="top" style="display: none">
+    <span class="status">·</span>
+    <div>
+        <label>Código de sala:</label> <span class="gameid">???</span>
+    </div>
+    <div>
+        <label>Tu nombre:</label> <span class="playerid">???</span>
+    </div>
+</div>
+<div id="actions" style="display: none">
+    <div id="do_tirar_carta" style="display: none" data-kind="accion" data-tipo="pasar">
+        PASAR <span>♻</span>
+    </div>
+    <div id="do_usar_carta" style="display: none" data-kind="accion" data-tipo="usar">
+        USAR
+    </div>
+    <div id="do_help" style="display: none" data-kind="accion" data-tipo="help">
+        HELP!
+    </div>
+    <div id="do_start_game">
+        Cuando estén todos... EMPIEZA!
+    </div>
+    <div id="fin_partida" style="display: none">
+        ¡Fin de la partida!
+    </div>
+</div>
+
+<div id="step_neworjoin" class="form">
+    <span>¿Qué quieres hacer?</span>
+    <button id="new_game" class="buttona">Empezar un juego</button>
+    <button id="join_game" class="buttonb">Unirme a un juego</button>
+</div>
+
+<div id="step_new" style="display: none" class="form">
+    <span>Serás el administrador de este juego, piensa en un nombre para tu sala:</span>
+    <input id="new_game_id" type="text" placeholder="nombre de sala" />
+    <br />
+    <button id="do_new_game" class="buttona">Crear sala</button>
+</div>
+
+<div id="step_join" style="display: none" class="form">
+    <span>Pide a quien haya creado el juego que te diga el nombre de la sala y mételo aquí:</span>
+    <input id="join_game_id" type="text" placeholder="nombre de la sala" />
+    <br />
+    <button id="do_join_game" class="buttona">Ir a la sala</button>
+</div>
+
+<div id="step_playerin" style="display: none" class="form">
+    <span>¿Cuál va a ser tu nombre dentro de la sala?</span>
+    <input id="player_id" type="text" placeholder="tu nombre"/>
+    <br />
+    <button id="do_player_in" class="buttona">Jugar!</button>
+</div>
+
+<div id="step_game" style="display: none">
+    <div id="players">
+
+    </div>
+</div>
+
+</body>
+</html>
