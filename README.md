@@ -6,3 +6,6 @@ Lo hice por el coronavirus, para que mi hija pudiera jugar on-line con las amiga
 
 *USO PRIVADO* (para lo que quieras, más que nada porque si te gusta el juego ¡compra la versión original!)
 
+Yo uso las imágenes originales, pero he puesto estas más cutres por tema de licencias y tal.
+
+![un ejemplo cualquiera](ejemplo.png)
